@@ -14,10 +14,10 @@ CodeClash2 is a competitive programming platform where developers can participat
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/codeclash2.git
+git clone https://github.com/WebVishnu/CodeClash.git
 
 # Navigate to the project directory
-cd codeclash2
+cd codeclash
 
 # Install dependencies
 npm install
@@ -31,13 +31,7 @@ npm run dev
 
 # Build for production
 npm run build
-
-# Run tests
-npm test
 ```
-
-## Documentation
-For more detailed information, please refer to the [documentation](docs/index.md).
 
 ## Contributing
 Contributions are welcome! Please feel free to submit a Pull Request.
@@ -46,7 +40,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
 3. Commit your changes (`git commit -m 'Add some amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## License
-This project is licensed under the [MIT License](LICENSE). 
+5. Open a Pull Request 
