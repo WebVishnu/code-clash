@@ -545,7 +545,7 @@ export default function Dashboard() {
                   </button>
                 </div>
                 <p className="text-indigo-300 mt-4 mb-8 max-w-md">
-                  Challenge other coders to a battle of wits and syntax. Show off your coding prowess in real-time matches!
+                  Challenge other coders to a battlsdfsde of wits and syntax. Show off your coding prowess in real-time matches!
                 </p>
               </div>
             )}

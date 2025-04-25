@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Swords, Code, Users, ArrowRight, Zap } from 'lucide-react';
+import { Swords, Code, Users, Trophy, ArrowRight, Terminal, Zap } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 export default function Home() {
