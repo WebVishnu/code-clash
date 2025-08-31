@@ -266,6 +266,12 @@ export default function Dashboard() {
   const createMatch = async (opponent: any) => {
     console.log('Creating match with opponent:', opponent);
     
+    // Get current user to ensure authentication
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+    
     const { data: opponentCheck } = await supabase
       .from('match_queue')
       .select('*')
@@ -277,10 +283,13 @@ export default function Dashboard() {
       return null;
     }
 
+    // Ensure we're using the authenticated user's ID
+    const currentUserId = user.id;
+    
     const { data: match, error: matchError } = await supabase
       .from('matches')
       .insert({
-        player1_id: profile?.id,
+        player1_id: currentUserId,
         player2_id: opponent.user_id,
         status: 'pending'
       })
@@ -303,10 +312,10 @@ export default function Dashboard() {
       throw problemsError;
     }
 
-    if (!problems || problems.length === 0) {
-      console.error('No problems found in the database');
-      throw new Error('No problems found in the database');
-    }
+         if (!problems || problems.length === 0) {
+       console.error('No problems found in the database');
+       throw new Error('No coding problems available. Please contact support.');
+     }
 
     const randomIndex = Math.floor(Math.random() * problems.length);
     const randomProblemId = problems[randomIndex].id;

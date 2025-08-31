@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import MonacoEditor from '@monaco-editor/react';
-import { Play, Clock, CheckCircle, XCircle, ArrowLeft, AlertTriangle } from 'lucide-react';
+import { Play, Clock, CheckCircle, XCircle, ArrowLeft, AlertTriangle, Copy, RotateCcw, Settings, Download, Upload } from 'lucide-react';
+import Toast from '../components/Toast';
 
 interface Problem {
   id: string;
@@ -10,7 +11,7 @@ interface Problem {
   description: string;
   sample_input: string;
   sample_output: string;
-  test_cases: any;
+  test_cases: Record<string, unknown>;
   difficulty: string;
 }
 
@@ -33,12 +34,51 @@ interface TestResult {
   };
 }
 
+interface Match {
+  id: string;
+  player1_id: string;
+  player2_id: string;
+  status: 'pending' | 'active' | 'completed';
+  winner_id?: string;
+  created_at: string;
+  updated_at: string;
+  winner?: {
+    email: string;
+  };
+}
+
+interface MatchChannel {
+  unsubscribe: () => void;
+}
+
+// Code templates for different languages
+const CODE_TEMPLATES = {
+  javascript: `// Write your solution here
+function solution(input) {
+    // Your code here
+    return input;
+}
+
+// Example usage:
+// console.log(solution("test"));
+`,
+  python: `# Write your solution here
+def solution(input):
+    # Your code here
+    return input
+
+# Example usage:
+# print(solution("test"))
+`
+};
+
 export default function Match() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [match, setMatch] = useState<any>(null);
+  const editorRef = useRef<any>(null);
+  const [match, setMatch] = useState<Match | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
-  const [code, setCode] = useState('// Write your solution here');
+  const [code, setCode] = useState(CODE_TEMPLATES.javascript);
   const [language, setLanguage] = useState('javascript');
   const [submissions, setSubmissions] = useState<CodeSubmission[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,8 +91,64 @@ export default function Match() {
   const [showWinMessage, setShowWinMessage] = useState(false);
   const [testStats, setTestStats] = useState({ passed: 0, total: 0 });
   const [showPlayerLeftPopup, setShowPlayerLeftPopup] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [matchChannel, setMatchChannel] = useState<any>(null);
+  const [matchChannel, setMatchChannel] = useState<MatchChannel | null>(null);
+  const [editorTheme, setEditorTheme] = useState<'vs-dark' | 'vs-light'>('vs-dark');
+  const [fontSize, setFontSize] = useState(14);
+  const [showSettings, setShowSettings] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; isVisible: boolean }>({
+    message: '',
+    type: 'info',
+    isVisible: false
+  });
+
+  // Handle language change
+  const handleLanguageChange = (newLanguage: string) => {
+    setLanguage(newLanguage);
+    setCode(CODE_TEMPLATES[newLanguage as keyof typeof CODE_TEMPLATES]);
+  };
+
+  // Copy code to clipboard
+  const handleCopyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setToast({ message: 'Code copied to clipboard!', type: 'success', isVisible: true });
+    } catch (err) {
+      console.error('Failed to copy code:', err);
+      setToast({ message: 'Failed to copy code', type: 'error', isVisible: true });
+    }
+  };
+
+  // Reset code to template
+  const handleResetCode = () => {
+    setCode(CODE_TEMPLATES[language as keyof typeof CODE_TEMPLATES]);
+  };
+
+  // Download code as file
+  const handleDownloadCode = () => {
+    const extension = language === 'javascript' ? 'js' : 'py';
+    const blob = new Blob([code], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `solution.${extension}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Upload code from file
+  const handleUploadCode = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const content = e.target?.result as string;
+        setCode(content);
+      };
+      reader.readAsText(file);
+    }
+  };
 
   useEffect(() => {
     const getMatchDetails = async () => {
@@ -63,8 +159,6 @@ export default function Match() {
           navigate('/login');
           return;
         }
-
-        setCurrentUserId(user.id);
 
         // Get match details
         const { data: match, error: matchError } = await supabase
@@ -100,11 +194,15 @@ export default function Match() {
 
         if (problemError) throw problemError;
 
-        if (!matchProblems || matchProblems.length === 0) {
-          setError('No problem found for this match');
-        } else {
-          setProblem(matchProblems[0].problem);
-        }
+                 if (!matchProblems || matchProblems.length === 0) {
+           setError('No problem found for this match. Please try creating a new match.');
+           // Show a button to go back to dashboard
+           setTimeout(() => {
+             navigate('/dashboard');
+           }, 3000);
+         } else {
+           setProblem(matchProblems[0].problem as unknown as Problem);
+         }
 
         // Get existing submissions
         const { data: existingSubmissions, error: submissionsError } = await supabase
@@ -131,7 +229,7 @@ export default function Match() {
               filter: `id=eq.${id}`,
             },
             (payload) => {
-              const updatedMatch = payload.new;
+              const updatedMatch = payload.new as Match;
               
               if (!updatedMatch) return;
 
@@ -250,7 +348,7 @@ export default function Match() {
       }
     } catch (error) {
       console.error('Error submitting code:', error);
-      setError(error.message || 'Failed to submit code');
+      setError((error as Error).message || 'Failed to submit code');
     } finally {
       setExecuting(false);
     }
@@ -296,37 +394,65 @@ export default function Match() {
     }
   };
 
-  const handleLeaveMatch = async () => {
-    try {
-      if (!match?.id) return;
+     const handleLeaveMatch = async () => {
+     try {
+       // Get current user to ensure authentication
+       const { data: { user } } = await supabase.auth.getUser();
+       if (!user) {
+         throw new Error('User not authenticated');
+       }
 
-      // Unsubscribe from match channel
-      if (matchChannel) {
-        await matchChannel.unsubscribe();
-        setMatchChannel(null);
-      }
+       // Unsubscribe from match channel
+       if (matchChannel) {
+         await matchChannel.unsubscribe();
+         setMatchChannel(null);
+       }
 
-      // Update match status
-      await supabase
-        .from('matches')
-        .update({ status: 'completed' })
-        .eq('id', match.id);
+       // Only try to update match if we have match data
+       if (match?.id) {
+         try {
+           // Update match status - ensure user is one of the players
+           const { error: updateError } = await supabase
+             .from('matches')
+             .update({ 
+               status: 'completed',
+               winner_id: match.player1_id === user.id ? match.player2_id : match.player1_id
+             })
+             .eq('id', match.id)
+             .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`);
 
-      // Clear match state
-      setMatch(null);
-      setProblem(null);
-      setSubmissions([]);
-      setTestResults([]);
-      setWinner(null);
-      setShowWinMessage(false);
-      setShowPlayerLeftPopup(false);
+           if (updateError) {
+             console.error('Error updating match:', updateError);
+             // Don't throw error here, just log it and continue
+           }
+         } catch (updateError) {
+           console.error('Error updating match:', updateError);
+           // Don't throw error here, just log it and continue
+         }
+       }
 
-      // Navigate to dashboard
-      navigate('/dashboard', { replace: true });
-    } catch (error) {
-      console.error('Error leaving match:', error);
-      setError('Failed to leave match');
-    }
+       // Clear match state
+       setMatch(null);
+       setProblem(null);
+       setSubmissions([]);
+       setTestResults([]);
+       setWinner(null);
+       setShowWinMessage(false);
+       setShowPlayerLeftPopup(false);
+       setError(null);
+
+       // Navigate to dashboard
+       navigate('/dashboard', { replace: true });
+     } catch (error) {
+       console.error('Error leaving match:', error);
+       // Even if there's an error, try to navigate to dashboard
+       navigate('/dashboard', { replace: true });
+     }
+   };
+
+  const handleEditorDidMount = (editor: any) => {
+    editorRef.current = editor;
+    editor.focus();
   };
 
   if (loading) {
@@ -337,13 +463,33 @@ export default function Match() {
     );
   }
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-red-500">{error}</div>
-      </div>
-    );
-  }
+     if (error) {
+     return (
+       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+         <div className="bg-gray-800 p-8 rounded-lg shadow-xl text-center max-w-md">
+           <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+           <h2 className="text-2xl font-bold text-white mb-4">Error</h2>
+           <p className="text-red-400 mb-6">{error}</p>
+           <div className="flex space-x-4 justify-center">
+             <button
+               onClick={() => navigate('/dashboard')}
+               className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+             >
+               Go to Dashboard
+             </button>
+             {match && (
+               <button
+                 onClick={handleLeaveMatch}
+                 className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+               >
+                 Leave Match
+               </button>
+             )}
+           </div>
+         </div>
+       </div>
+     );
+   }
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -408,19 +554,25 @@ export default function Match() {
               </div>
             )}
           </div>
-          <div className="flex items-center space-x-8">
+          <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <Clock className="h-5 w-5 text-gray-400" />
               <span className="text-xl font-mono">{elapsedTime}</span>
             </div>
             <select
               value={language}
-              onChange={(e) => setLanguage(e.target.value)}
+              onChange={(e) => handleLanguageChange(e.target.value)}
               className="bg-gray-800 border border-gray-700 rounded px-3 py-1"
             >
               <option value="javascript">JavaScript</option>
               <option value="python">Python</option>
             </select>
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className="p-2 text-gray-400 hover:text-white transition-colors"
+            >
+              <Settings className="h-5 w-5" />
+            </button>
           </div>
         </div>
 
@@ -502,21 +654,153 @@ export default function Match() {
           </div>
 
           <div className="space-y-4">
-            <div className="h-[600px] bg-gray-800 rounded-lg overflow-hidden">
+            {/* Editor Toolbar */}
+            <div className="bg-gray-800 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold">Code Editor</h3>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={handleCopyCode}
+                    className="p-2 text-gray-400 hover:text-white transition-colors"
+                    title="Copy code"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={handleResetCode}
+                    className="p-2 text-gray-400 hover:text-white transition-colors"
+                    title="Reset to template"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={handleDownloadCode}
+                    className="p-2 text-gray-400 hover:text-white transition-colors"
+                    title="Download code"
+                  >
+                    <Download className="h-4 w-4" />
+                  </button>
+                  <label className="p-2 text-gray-400 hover:text-white transition-colors cursor-pointer" title="Upload code">
+                    <Upload className="h-4 w-4" />
+                    <input
+                      type="file"
+                      accept=".js,.py,.txt"
+                      onChange={handleUploadCode}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+              
+              {/* Settings Panel */}
+              {showSettings && (
+                <div className="bg-gray-900 p-4 rounded-lg mb-4">
+                  <h4 className="text-sm font-medium mb-3">Editor Settings</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Theme</label>
+                      <select
+                        value={editorTheme}
+                        onChange={(e) => setEditorTheme(e.target.value as 'vs-dark' | 'vs-light')}
+                        className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm"
+                      >
+                        <option value="vs-dark">Dark</option>
+                        <option value="vs-light">Light</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Font Size</label>
+                      <select
+                        value={fontSize}
+                        onChange={(e) => setFontSize(Number(e.target.value))}
+                        className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm"
+                      >
+                        <option value={12}>12px</option>
+                        <option value={14}>14px</option>
+                        <option value={16}>16px</option>
+                        <option value={18}>18px</option>
+                        <option value={20}>20px</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Code Editor */}
+            <div className="h-[600px] bg-gray-800 rounded-lg overflow-hidden border border-gray-700">
               <MonacoEditor
                 height="100%"
                 language={language}
                 value={code}
                 onChange={handleCodeChange}
-                theme="vs-dark"
+                theme={editorTheme}
+                onMount={handleEditorDidMount}
                 options={{
-                  minimap: { enabled: false },
-                  fontSize: 14,
+                  minimap: { enabled: true },
+                  fontSize: fontSize,
                   wordWrap: 'on',
                   automaticLayout: true,
+                  lineNumbers: 'on',
+                  roundedSelection: false,
+                  scrollBeyondLastLine: false,
+                  readOnly: false,
+                  cursorStyle: 'line',
+                                     tabSize: 2,
+                   insertSpaces: true,
+                   detectIndentation: true,
+                   trimAutoWhitespace: true,
+                   largeFileOptimizations: true,
+                  suggest: {
+                    showKeywords: true,
+                    showSnippets: true,
+                    showClasses: true,
+                    showFunctions: true,
+                    showVariables: true,
+                    showModules: true,
+                    showProperties: true,
+                    showEvents: true,
+                    showOperators: true,
+                    showUnits: true,
+                    showValues: true,
+                    showConstants: true,
+                    showEnums: true,
+                    showEnumMembers: true,
+                    showColors: true,
+                    showFiles: true,
+                    showReferences: true,
+                    showFolders: true,
+                    showTypeParameters: true,
+                    showWords: true,
+                    showUsers: true,
+                    showIssues: true,
+                  },
+                  quickSuggestions: {
+                    other: true,
+                    comments: true,
+                    strings: true,
+                  },
+                  parameterHints: {
+                    enabled: true,
+                  },
+                  hover: {
+                    enabled: true,
+                  },
+                  contextmenu: true,
+                  mouseWheelZoom: true,
+                  bracketPairColorization: {
+                    enabled: true,
+                  },
+                  guides: {
+                    bracketPairs: true,
+                    indentation: true,
+                    highlightActiveIndentation: true,
+                  },
                 }}
               />
             </div>
+            
+            {/* Submit Button */}
             <button
               onClick={handleSubmit}
               disabled={executing || !!winner}
@@ -528,6 +812,14 @@ export default function Match() {
           </div>
         </div>
       </div>
+      
+      {/* Toast Notification */}
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        isVisible={toast.isVisible}
+        onClose={() => setToast(prev => ({ ...prev, isVisible: false }))}
+      />
     </div>
   );
 }
