@@ -86,8 +86,8 @@ Deno.serve(async (req) => {
     console.log('Received request');
     
     const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      Deno.env.get('VITE_SUPABASE_URL')!,
+      Deno.env.get('VITE_SUPABASE_ANON_KEY')!
     );
 
     const { matchId, userId, code, language, problemId } = await req.json();
