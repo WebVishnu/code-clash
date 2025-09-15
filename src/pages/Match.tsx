@@ -27,6 +27,7 @@ interface CodeSubmission {
 interface TestResult {
   passed: boolean;
   output: string;
+  expectedOutput?: string;
   error: string | null;
   status: {
     id: number;
@@ -615,6 +616,16 @@ export default function Match() {
                       <span className={result.passed ? 'text-green-500' : 'text-red-500'}>
                         {result.passed ? 'Passed' : 'Failed'}
                       </span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <div className="text-gray-400">Expected</div>
+                        <pre className="mt-1 bg-gray-950 p-2 rounded overflow-auto whitespace-pre-wrap break-words">{result.expectedOutput ?? ''}</pre>
+                      </div>
+                      <div>
+                        <div className="text-gray-400">Actual</div>
+                        <pre className="mt-1 bg-gray-950 p-2 rounded overflow-auto whitespace-pre-wrap break-words">{result.output}</pre>
+                      </div>
                     </div>
                     {result.error && (
                       <div className="mt-2 text-red-400 text-sm">

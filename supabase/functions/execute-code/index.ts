@@ -1,7 +1,9 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.39.7';
 
-const JUDGE0_API_URL = 'https://judge0-ce.p.rapidapi.com';
-const JUDGE0_API_KEY = '70da1bfb2cmsh3413fd0470a56f8p1a1c14jsn65a2715c9065';
+// Read Judge0 configuration from environment
+const JUDGE0_API_URL = Deno.env.get('JUDGE0_API_URL') || 'https://judge0-ce.p.rapidapi.com';
+const JUDGE0_API_KEY = Deno.env.get('JUDGE0_API_KEY') || '';
+const JUDGE0_API_HOST = Deno.env.get('JUDGE0_API_HOST') || 'judge0-ce.p.rapidapi.com';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -29,7 +31,7 @@ async function createSubmission(data: SubmissionRequest) {
     headers: {
       'Content-Type': 'application/json',
       'X-RapidAPI-Key': JUDGE0_API_KEY,
-      'X-RapidAPI-Host': 'judge0-ce.p.rapidapi.com',
+      'X-RapidAPI-Host': JUDGE0_API_HOST,
     },
     body: JSON.stringify(data),
   });
@@ -44,36 +46,16 @@ async function createSubmission(data: SubmissionRequest) {
 }
 
 function wrapCodeWithTestCase(code: string, language: string, testCase: TestCase): string {
-  const input = JSON.stringify(testCase.input);
-  
+  const inputJson = JSON.stringify(testCase.input);
+
   if (language === 'javascript') {
-    return `
-      let result;  // Global result variable
-      function solution(input) {
-        ${code}
-        return result;  // Return the result
-      }
-      
-      // Test case execution
-      const result = solution(${input});
-      console.log(JSON.stringify(result));
-    `;
+    // Expect user code to define a function named `solution(input)`
+    return `${code}\n\n(() => {\n  const __input = ${inputJson};\n  try {\n    const __res = typeof solution === 'function' ? solution(__input) : null;\n    console.log(JSON.stringify(__res));\n  } catch (e) {\n    console.error(String(e));\n  }\n})();\n`;
   } else if (language === 'python') {
-    return `
-result = None  # Global result variable
-
-def solution(input):
-    global result
-${code.split('\n').map(line => '    ' + line).join('\n')}
-    return result  # Return the result
-
-# Test case execution
-import json
-result = solution(${input})
-print(json.dumps(result))
-    `;
+    // Expect user code to define a function named `solution(input)`
+    return `${code}\n\nimport json\n__input = ${inputJson}\ntry:\n    __res = solution(__input)\n    print(json.dumps(__res))\nexcept Exception as e:\n    print(str(e))\n`;
   }
-  
+
   throw new Error('Unsupported language');
 }
 
@@ -86,8 +68,8 @@ Deno.serve(async (req) => {
     console.log('Received request');
     
     const supabaseClient = createClient(
-      Deno.env.get('VITE_SUPABASE_URL')!,
-      Deno.env.get('VITE_SUPABASE_ANON_KEY')!
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
     const { matchId, userId, code, language, problemId } = await req.json();
